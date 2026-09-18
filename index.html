@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>TV távirányító</title>
+<style>
+  :root {
+    --bg: #0e0e12;
+    --panel: #1b1c22;
+    --accent: #5b8cff;
+    --text: #f2f2f4;
+    --muted: #8a8b96;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overscroll-behavior: none;
+    touch-action: none;
+  }
+  .wrap { display: flex; flex-direction: column; height: 100%; padding: 10px; gap: 10px; }
+
+  .status { text-align: center; font-size: 12px; color: var(--muted); padding: 4px; }
+  .status.ok { color: #4ade80; }
+  .status.bad { color: #f87171; }
+
+  .quicklaunch {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  .quicklaunch button {
+    background: var(--panel);
+    border: 1px solid #2a2b33;
+    color: var(--text);
+    border-radius: 12px;
+    padding: 10px 4px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .quicklaunch button:active { background: var(--accent); }
+
+  .touchpad {
+    flex: 1;
+    background: var(--panel);
+    border-radius: 18px;
+    border: 1px solid #2a2b33;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: 14px;
+    min-height: 160px;
+  }
+
+  .rowbtns {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .rowbtns.five { grid-template-columns: repeat(5, 1fr); }
+  .rowbtns button {
+    background: var(--panel);
+    border: 1px solid #2a2b33;
+    color: var(--text);
+    border-radius: 12px;
+    padding: 14px 4px;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .rowbtns button:active { background: var(--accent); }
+
+  form.searchbar {
+    display: flex;
+    gap: 8px;
+  }
+  .searchbar input {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid #2a2b33;
+    color: var(--text);
+    border-radius: 12px;
+    padding: 14px;
+    font-size: 16px;
+  }
+  .searchbar button {
+    background: var(--accent);
+    border: none;
+    color: white;
+    border-radius: 12px;
+    padding: 0 18px;
+    font-weight: 700;
+  }
+
+  .statusrow { display: flex; align-items: center; gap: 8px; }
+  .statusrow .status { flex: 1; }
+  .gearbtn {
+    background: none; border: none; color: var(--muted);
+    font-size: 18px; padding: 4px 8px;
+  }
+
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+    display: none; align-items: center; justify-content: center; z-index: 10;
+    padding: 20px;
+  }
+  .overlay.open { display: flex; }
+  .settingsbox {
+    background: var(--panel); border: 1px solid #2a2b33; border-radius: 16px;
+    padding: 20px; width: 100%; max-width: 340px;
+  }
+  .settingsbox h2 { font-size: 16px; margin: 0 0 6px; }
+  .settingsbox p { font-size: 13px; color: var(--muted); line-height: 1.5; margin: 0 0 14px; }
+  .settingsbox input {
+    width: 100%; background: #111217; border: 1px solid #2a2b33; color: var(--text);
+    border-radius: 10px; padding: 12px; font-size: 15px; margin-bottom: 12px;
+  }
+  .settingsbox .savebtn {
+    width: 100%; background: var(--accent); border: none; color: white;
+    border-radius: 10px; padding: 12px; font-weight: 700; font-size: 15px;
+  }
+  .settingsbox .closebtn {
+    width: 100%; background: none; border: none; color: var(--muted);
+    padding: 10px; font-size: 13px; margin-top: 4px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="statusrow">
+    <div id="status" class="status">csatlakozás…</div>
+    <button class="gearbtn" id="btnSettings">⚙️</button>
+  </div>
+
+  <div class="overlay" id="settingsOverlay">
+    <div class="settingsbox">
+      <h2>Pi címe</h2>
+      <p>Add meg a Raspberry Pi helyi IP-címét (pl. <code>192.168.1.50</code>).
+      Ezt a Pi terminálján a <code>hostname -I</code> paranccsal nézheted meg.
+      Ha ez az oldal https-en fut, első alkalommal nyisd meg közvetlenül a
+      <code>https://&lt;Pi-IP&gt;:5443</code> címet a telefonodon, és fogadd
+      el a tanúsítvány-figyelmeztetést - utána itt is működni fog.</p>
+      <input id="piHostInput" type="text" placeholder="192.168.1.50" autocapitalize="off" autocorrect="off">
+      <button class="savebtn" id="btnSaveSettings">Mentés és csatlakozás</button>
+      <button class="closebtn" id="btnCloseSettings">Bezár</button>
+    </div>
+  </div>
+
+  <div class="quicklaunch">
+    <button data-launch="home">🏠 Főoldal</button>
+    <button data-launch="youtube">▶️ YouTube</button>
+    <button data-launch="netflix">🎬 Netflix</button>
+    <button data-launch="browser">🌐 Böngésző</button>
+  </div>
+
+  <form class="searchbar" id="searchForm">
+    <input id="searchInput" type="text" placeholder="Írj be szöveget / keresést…" autocomplete="off" autocapitalize="off" autocorrect="off">
+    <button type="submit">Küld</button>
+  </form>
+
+  <div class="touchpad" id="touchpad">
+    Húzd az ujjad ide egér mozgatáshoz<br>Koppintás = kattintás
+  </div>
+
+  <div class="rowbtns five">
+    <button id="btnBack">◀ Vissza</button>
+    <button id="btnUp">▲</button>
+    <button id="btnVolDown">🔉</button>
+    <button id="btnVolUp">🔊</button>
+    <button id="btnMute">🔇</button>
+  </div>
+  <div class="rowbtns">
+    <button id="btnLeft">◀</button>
+    <button id="btnEnter">OK ↵</button>
+    <button id="btnRight">▶</button>
+  </div>
+  <div class="rowbtns">
+    <button id="btnDown">▼</button>
+    <button id="btnEsc">Esc</button>
+    <button id="btnRightClick">Jobb klikk</button>
+  </div>
+</div>
+
+<script>
+const statusEl = document.getElementById('status');
+const STORAGE_KEY = 'pi_remote_tv_host';
+
+// Az oldal https-en fut -> csak titkosított wss://+https:// engedélyezett a Pi felé.
+// http-n fut (pl. közvetlenül a Pi-ről nyitva) -> a sima ws://+http:// is jó,
+// ez az eredeti, egyszerűbb eset marad változatlan.
+const secure = location.protocol === 'https:';
+const wsProto = secure ? 'wss' : 'ws';
+const apiProto = secure ? 'https' : 'http';
+const piPort = secure ? 5443 : 5000;
+
+function getPiHost() {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) return saved;
+  // Ha ezt az oldalt maga a Pi szolgálja ki (az eredeti, egyszerű eset),
+  // a location.hostname már önmagában jó cím - nincs szükség beállításra.
+  return location.hostname;
+}
+
+let piHost = getPiHost();
+
+function apiBase() { return `${apiProto}://${piHost}:${piPort}`; }
+function wsUrl() { return `${wsProto}://${piHost}:${piPort}/ws`; }
+
+let ws;
+let wsReady = false;
+let reconnectTimer = null;
+
+function connect() {
+  if (!piHost) {
+    statusEl.textContent = 'Add meg a Pi címét (⚙️)';
+    statusEl.className = 'status bad';
+    openSettings();
+    return;
+  }
+  clearTimeout(reconnectTimer);
+  try { ws && ws.close(); } catch (e) {}
+  ws = new WebSocket(wsUrl());
+  statusEl.textContent = `Csatlakozás: ${piHost}…`;
+  statusEl.className = 'status';
+  ws.onopen = () => { wsReady = true; statusEl.textContent = 'Csatlakozva'; statusEl.className = 'status ok'; };
+  ws.onclose = () => {
+    wsReady = false;
+    statusEl.textContent = 'Kapcsolat bontva – újracsatlakozás…';
+    statusEl.className = 'status bad';
+    reconnectTimer = setTimeout(connect, 2000);
+  };
+  ws.onerror = () => ws.close();
+}
+connect();
+
+function send(obj) {
+  if (wsReady) ws.send(JSON.stringify(obj));
+}
+
+// --- Beállítások panel (Pi címének megadása) ---
+const overlay = document.getElementById('settingsOverlay');
+const piHostInput = document.getElementById('piHostInput');
+function openSettings() {
+  piHostInput.value = piHost || '';
+  overlay.classList.add('open');
+}
+function closeSettings() { overlay.classList.remove('open'); }
+document.getElementById('btnSettings').addEventListener('click', openSettings);
+document.getElementById('btnCloseSettings').addEventListener('click', closeSettings);
+document.getElementById('btnSaveSettings').addEventListener('click', () => {
+  const val = piHostInput.value.trim();
+  if (!val) return;
+  piHost = val;
+  localStorage.setItem(STORAGE_KEY, piHost);
+  closeSettings();
+  connect();
+});
+
+// --- Gyorsindítás gombok ---
+document.querySelectorAll('[data-launch]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    fetch(`${apiBase()}/api/launch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target: btn.dataset.launch })
+    }).catch(() => {});
+  });
+});
+
+// --- Kereső / szövegbeviteli mező ---
+document.getElementById('searchForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const input = document.getElementById('searchInput');
+  const text = input.value;
+  if (text) {
+    send({ type: 'type', text });
+    send({ type: 'key', key: 'Return' });
+    input.value = '';
+  }
+});
+
+// --- Gombok ---
+const keyMap = {
+  btnUp: 'Up', btnDown: 'Down', btnLeft: 'Left', btnRight: 'Right',
+  btnEnter: 'Return', btnEsc: 'Escape'
+};
+Object.entries(keyMap).forEach(([id, key]) => {
+  document.getElementById(id).addEventListener('click', () => send({ type: 'key', key }));
+});
+document.getElementById('btnBack').addEventListener('click', () => send({ type: 'back' }));
+document.getElementById('btnRightClick').addEventListener('click', () => send({ type: 'click', button: 'right' }));
+document.getElementById('btnVolUp').addEventListener('click', () => fetch(`${apiBase()}/api/volume/up`, { method: 'POST' }).catch(() => {}));
+document.getElementById('btnVolDown').addEventListener('click', () => fetch(`${apiBase()}/api/volume/down`, { method: 'POST' }).catch(() => {}));
+document.getElementById('btnMute').addEventListener('click', () => fetch(`${apiBase()}/api/volume/mute`, { method: 'POST' }).catch(() => {}));
+
+// --- Touchpad: relatív mozgatás és koppintás-kattintás ---
+const pad = document.getElementById('touchpad');
+let last = null;
+let moved = false;
+let touchStartTime = 0;
+const SENSITIVITY = 1.6;
+
+pad.addEventListener('touchstart', (e) => {
+  const t = e.touches[0];
+  last = { x: t.clientX, y: t.clientY };
+  moved = false;
+  touchStartTime = Date.now();
+}, { passive: true });
+
+pad.addEventListener('touchmove', (e) => {
+  const t = e.touches[0];
+  if (last) {
+    const dx = (t.clientX - last.x) * SENSITIVITY;
+    const dy = (t.clientY - last.y) * SENSITIVITY;
+    if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+      send({ type: 'move', dx: Math.round(dx), dy: Math.round(dy) });
+      moved = true;
+    }
+  }
+  last = { x: t.clientX, y: t.clientY };
+  e.preventDefault();
+}, { passive: false });
+
+pad.addEventListener('touchend', () => {
+  const duration = Date.now() - touchStartTime;
+  if (!moved && duration < 300) {
+    send({ type: 'click', button: 'left' });
+  }
+  last = null;
+}, { passive: true });
+
+// Két ujjas koppintás = jobb klikk
+let twoFingerStart = 0;
+pad.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 2) twoFingerStart = Date.now();
+}, { passive: true });
+pad.addEventListener('touchend', (e) => {
+  if (twoFingerStart && Date.now() - twoFingerStart < 300 && e.touches.length === 0) {
+    send({ type: 'click', button: 'right' });
+  }
+  twoFingerStart = 0;
+}, { passive: true });
+</script>
+</body>
+</html>
